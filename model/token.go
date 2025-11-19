@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -27,6 +28,7 @@ type Token struct {
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	Group              string         `json:"group" gorm:"default:''"`
+	IgSubscriptionId   *int64         `json:"ig_subscription_id,omitempty" gorm:"column:ig_subscription_id;uniqueIndex"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
 
@@ -361,4 +363,124 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	}
 
 	return len(tokens), nil
+}
+
+func GetTokenByIgSubscriptionID(subscriptionID int64) (*Token, error) {
+	if subscriptionID == 0 {
+		return nil, errors.New("subscriptionID 不能为空")
+	}
+	var token Token
+	err := DB.Where("ig_subscription_id = ?", subscriptionID).First(&token).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func UpsertIgToken(userID int, subscriptionID int64, group string, expiresAt *time.Time, rotateKey bool, tokenName string) (*Token, error) {
+	if userID <= 0 {
+		return nil, errors.New("userID 不能为空")
+	}
+	if subscriptionID <= 0 {
+		return nil, errors.New("subscriptionID 不能为空")
+	}
+	expired := int64(-1)
+	if expiresAt != nil {
+		expired = expiresAt.Unix()
+	}
+	updateTime := common.GetTimestamp()
+	token, err := GetTokenByIgSubscriptionID(subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	if token == nil {
+		key, err := common.GenerateKey()
+		if err != nil {
+			return nil, err
+		}
+		name := strings.TrimSpace(tokenName)
+		if name == "" {
+			name = fmt.Sprintf("ig-sub-%d", subscriptionID)
+		}
+		token = &Token{
+			UserId:           userID,
+			Name:             name,
+			Key:              key,
+			Status:           common.TokenStatusEnabled,
+			CreatedTime:      updateTime,
+			AccessedTime:     updateTime,
+			ExpiredTime:      expired,
+			RemainQuota:      0,
+			UnlimitedQuota:   true,
+			Group:            group,
+			IgSubscriptionId: common.GetPointer[int64](subscriptionID),
+		}
+		if err := DB.Create(token).Error; err != nil {
+			return nil, err
+		}
+		if common.RedisEnabled {
+			_ = cacheSetToken(*token)
+		}
+		return token, nil
+	}
+
+	updates := map[string]interface{}{
+		"user_id":         userID,
+		"group":           group,
+		"status":          common.TokenStatusEnabled,
+		"expired_time":    expired,
+		"unlimited_quota": true,
+		"accessed_time":   updateTime,
+	}
+	if rotateKey {
+		key, err := common.GenerateKey()
+		if err != nil {
+			return nil, err
+		}
+		updates["key"] = key
+		token.Key = key
+	}
+	if err := DB.Model(&Token{}).Where("id = ?", token.Id).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	token.UserId = userID
+	token.Group = group
+	token.Status = common.TokenStatusEnabled
+	token.ExpiredTime = expired
+	token.UnlimitedQuota = true
+	token.AccessedTime = updateTime
+	if token.IgSubscriptionId == nil {
+		token.IgSubscriptionId = common.GetPointer[int64](subscriptionID)
+	}
+	if common.RedisEnabled {
+		_ = cacheSetToken(*token)
+	}
+	return token, nil
+}
+
+func DisableTokenByIgSubscriptionID(subscriptionID int64) (bool, error) {
+	if subscriptionID == 0 {
+		return false, nil
+	}
+	token, err := GetTokenByIgSubscriptionID(subscriptionID)
+	if err != nil {
+		return false, err
+	}
+	if token == nil {
+		return false, nil
+	}
+	if err := DB.Model(&Token{}).Where("id = ?", token.Id).Updates(map[string]interface{}{
+		"status":        common.TokenStatusDisabled,
+		"accessed_time": common.GetTimestamp(),
+	}).Error; err != nil {
+		return false, err
+	}
+	token.Status = common.TokenStatusDisabled
+	if common.RedisEnabled {
+		_ = cacheSetToken(*token)
+	}
+	return true, nil
 }
