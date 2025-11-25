@@ -68,6 +68,17 @@ type TaskAdaptor struct {
 	baseURL     string
 }
 
+func buildTaskBaseURL(channelBase string, region string) string {
+	base := strings.TrimSuffix(channelBase, "/")
+	if base != "" {
+		return base
+	}
+	if region == "" || region == "global" {
+		return "https://aiplatform.googleapis.com"
+	}
+	return fmt.Sprintf("https://%s-aiplatform.googleapis.com", region)
+}
+
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
@@ -95,16 +106,10 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if strings.TrimSpace(region) == "" {
 		region = "global"
 	}
-	if region == "global" {
-		return fmt.Sprintf(
-			"https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:predictLongRunning",
-			adc.ProjectID,
-			modelName,
-		), nil
-	}
+	baseURL := buildTaskBaseURL(a.baseURL, region)
 	return fmt.Sprintf(
-		"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predictLongRunning",
-		region,
+		"%s/v1/projects/%s/locations/%s/publishers/google/models/%s:predictLongRunning",
+		baseURL,
 		adc.ProjectID,
 		region,
 		modelName,
@@ -121,7 +126,7 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 		return fmt.Errorf("failed to decode credentials: %w", err)
 	}
 
-	token, err := vertexcore.AcquireAccessToken(*adc, "")
+	token, err := vertexcore.AcquireAccessToken(*adc, "", a.baseURL)
 	if err != nil {
 		return fmt.Errorf("failed to acquire access token: %w", err)
 	}
@@ -208,12 +213,8 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any) (*http
 	if project == "" || modelName == "" {
 		return nil, fmt.Errorf("cannot extract project/model from operation name")
 	}
-	var url string
-	if region == "global" {
-		url = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:fetchPredictOperation", project, modelName)
-	} else {
-		url = fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:fetchPredictOperation", region, project, region, modelName)
-	}
+	baseURL := buildTaskBaseURL(a.baseURL, region)
+	url := fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:fetchPredictOperation", baseURL, project, region, modelName)
 	payload := map[string]string{"operationName": upstreamName}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -223,7 +224,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any) (*http
 	if err := json.Unmarshal([]byte(key), adc); err != nil {
 		return nil, fmt.Errorf("failed to decode credentials: %w", err)
 	}
-	token, err := vertexcore.AcquireAccessToken(*adc, "")
+	token, err := vertexcore.AcquireAccessToken(*adc, "", a.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire access token: %w", err)
 	}

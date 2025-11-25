@@ -37,7 +37,16 @@ var Cache = asynccache.NewAsyncCache(asynccache.Options{
 	},
 })
 
+func getTokenURL(channelBase string) string {
+	base := strings.TrimSuffix(channelBase, "/")
+	if base == "" {
+		return "https://www.googleapis.com/oauth2/v4/token"
+	}
+	return base + "/oauth2/v4/token"
+}
+
 func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
+	tokenURL := getTokenURL(info.ChannelBaseUrl)
 	var cacheKey string
 	if info.ChannelIsMultiKey {
 		cacheKey = fmt.Sprintf("access-token-%d-%d", info.ChannelId, info.ChannelMultiKeyIndex)
@@ -49,11 +58,11 @@ func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 		return val.(string), nil
 	}
 
-	signedJWT, err := createSignedJWT(a.AccountCredentials.ClientEmail, a.AccountCredentials.PrivateKey)
+	signedJWT, err := createSignedJWT(a.AccountCredentials.ClientEmail, a.AccountCredentials.PrivateKey, tokenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	newToken, err := exchangeJwtForAccessToken(signedJWT, info)
+	newToken, err := exchangeJwtForAccessToken(signedJWT, info, tokenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to exchange JWT for access token: %w", err)
 	}
@@ -63,7 +72,7 @@ func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	return newToken, nil
 }
 
-func createSignedJWT(email, privateKeyPEM string) (string, error) {
+func createSignedJWT(email, privateKeyPEM, audience string) (string, error) {
 
 	privateKeyPEM = strings.ReplaceAll(privateKeyPEM, "-----BEGIN PRIVATE KEY-----", "")
 	privateKeyPEM = strings.ReplaceAll(privateKeyPEM, "-----END PRIVATE KEY-----", "")
@@ -90,7 +99,7 @@ func createSignedJWT(email, privateKeyPEM string) (string, error) {
 	claims := jwt.MapClaims{
 		"iss":   email,
 		"scope": "https://www.googleapis.com/auth/cloud-platform",
-		"aud":   "https://www.googleapis.com/oauth2/v4/token",
+		"aud":   audience,
 		"exp":   now.Add(time.Minute * 35).Unix(),
 		"iat":   now.Unix(),
 	}
@@ -104,9 +113,7 @@ func createSignedJWT(email, privateKeyPEM string) (string, error) {
 	return signedToken, nil
 }
 
-func exchangeJwtForAccessToken(signedJWT string, info *relaycommon.RelayInfo) (string, error) {
-
-	authURL := "https://www.googleapis.com/oauth2/v4/token"
+func exchangeJwtForAccessToken(signedJWT string, info *relaycommon.RelayInfo, authURL string) (string, error) {
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 	data.Set("assertion", signedJWT)
@@ -140,16 +147,16 @@ func exchangeJwtForAccessToken(signedJWT string, info *relaycommon.RelayInfo) (s
 	return "", fmt.Errorf("failed to get access token: %v", result)
 }
 
-func AcquireAccessToken(creds Credentials, proxy string) (string, error) {
-	signedJWT, err := createSignedJWT(creds.ClientEmail, creds.PrivateKey)
+func AcquireAccessToken(creds Credentials, proxy string, channelBase string) (string, error) {
+	tokenURL := getTokenURL(channelBase)
+	signedJWT, err := createSignedJWT(creds.ClientEmail, creds.PrivateKey, tokenURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	return exchangeJwtForAccessTokenWithProxy(signedJWT, proxy)
+	return exchangeJwtForAccessTokenWithProxy(signedJWT, proxy, tokenURL)
 }
 
-func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string, error) {
-	authURL := "https://www.googleapis.com/oauth2/v4/token"
+func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string, authURL string) (string, error) {
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 	data.Set("assertion", signedJWT)
