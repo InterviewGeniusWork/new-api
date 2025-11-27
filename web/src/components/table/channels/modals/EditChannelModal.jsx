@@ -1183,6 +1183,11 @@ const EditChannelModal = (props) => {
         localInputs.is_enterprise_account === true;
     }
 
+    // type === 41 (Vertex AI): 保存密钥格式到 settings
+    if (localInputs.type === 41) {
+      settings.vertex_key_type = localInputs.vertex_key_type || 'json';
+    }
+
     // type === 33 (AWS): 保存 aws_key_type 到 settings
     if (localInputs.type === 33) {
       settings.aws_key_type = localInputs.aws_key_type || 'ak_sk';
