@@ -45,6 +45,17 @@ var claudeModelMap = map[string]string{
 
 const anthropicVersion = "vertex-2023-10-16"
 
+func buildVertexBaseURL(channelBase string, region string) string {
+	base := strings.TrimSuffix(channelBase, "/")
+	if base != "" {
+		return base
+	}
+	if region == "" || region == "global" {
+		return "https://aiplatform.googleapis.com"
+	}
+	return fmt.Sprintf("https://%s-aiplatform.googleapis.com", region)
+}
+
 type Adaptor struct {
 	RequestMode        int
 	AccountCredentials Credentials
@@ -89,6 +100,7 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 
 func (a *Adaptor) getRequestUrl(info *relaycommon.RelayInfo, modelName, suffix string) (string, error) {
 	region := GetModelRegion(info.ApiVersion, info.OriginModelName)
+	baseURL := buildVertexBaseURL(info.ChannelBaseUrl, region)
 	if info.ChannelOtherSettings.VertexKeyType != dto.VertexKeyTypeAPIKey {
 		adc := &Credentials{}
 		if err := common.Unmarshal([]byte(info.ApiKey), adc); err != nil {
@@ -97,47 +109,41 @@ func (a *Adaptor) getRequestUrl(info *relaycommon.RelayInfo, modelName, suffix s
 		a.AccountCredentials = *adc
 
 		if a.RequestMode == RequestModeGemini {
-			if region == "global" {
-				return fmt.Sprintf(
-					"https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/google/models/%s:%s",
-					adc.ProjectID,
-					modelName,
-					suffix,
-				), nil
-			} else {
-				return fmt.Sprintf(
-					"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
-					region,
-					adc.ProjectID,
-					region,
-					modelName,
-					suffix,
-				), nil
+			location := region
+			if location == "" {
+				location = "global"
 			}
-		} else if a.RequestMode == RequestModeClaude {
-			if region == "global" {
-				return fmt.Sprintf(
-					"https://aiplatform.googleapis.com/v1/projects/%s/locations/global/publishers/anthropic/models/%s:%s",
-					adc.ProjectID,
-					modelName,
-					suffix,
-				), nil
-			} else {
-				return fmt.Sprintf(
-					"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/anthropic/models/%s:%s",
-					region,
-					adc.ProjectID,
-					region,
-					modelName,
-					suffix,
-				), nil
-			}
-		} else if a.RequestMode == RequestModeLlama {
 			return fmt.Sprintf(
-				"https://%s-aiplatform.googleapis.com/v1beta1/projects/%s/locations/%s/endpoints/openapi/chat/completions",
-				region,
+				"%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+				baseURL,
 				adc.ProjectID,
-				region,
+				location,
+				modelName,
+				suffix,
+			), nil
+		} else if a.RequestMode == RequestModeClaude {
+			location := region
+			if location == "" {
+				location = "global"
+			}
+			return fmt.Sprintf(
+				"%s/v1/projects/%s/locations/%s/publishers/anthropic/models/%s:%s",
+				baseURL,
+				adc.ProjectID,
+				location,
+				modelName,
+				suffix,
+			), nil
+		} else if a.RequestMode == RequestModeLlama {
+			location := region
+			if location == "" {
+				location = "global"
+			}
+			return fmt.Sprintf(
+				"%s/v1beta1/projects/%s/locations/%s/endpoints/openapi/chat/completions",
+				baseURL,
+				adc.ProjectID,
+				location,
 			), nil
 		}
 	} else {
@@ -147,24 +153,14 @@ func (a *Adaptor) getRequestUrl(info *relaycommon.RelayInfo, modelName, suffix s
 		} else {
 			keyPrefix = "?"
 		}
-		if region == "global" {
-			return fmt.Sprintf(
-				"https://aiplatform.googleapis.com/v1/publishers/google/models/%s:%s%skey=%s",
-				modelName,
-				suffix,
-				keyPrefix,
-				info.ApiKey,
-			), nil
-		} else {
-			return fmt.Sprintf(
-				"https://%s-aiplatform.googleapis.com/v1/publishers/google/models/%s:%s%skey=%s",
-				region,
-				modelName,
-				suffix,
-				keyPrefix,
-				info.ApiKey,
-			), nil
-		}
+		return fmt.Sprintf(
+			"%s/v1/publishers/google/models/%s:%s%skey=%s",
+			baseURL,
+			modelName,
+			suffix,
+			keyPrefix,
+			info.ApiKey,
+		), nil
 	}
 	return "", errors.New("unsupported request mode")
 }

@@ -42,6 +42,7 @@ type User struct {
 	AffQuota         int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota  int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId        int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	IgUserId         *int           `json:"ig_user_id,omitempty" gorm:"column:ig_user_id;uniqueIndex"`
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
 	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
@@ -177,6 +178,21 @@ func CheckUserExistOrDeleted(username string, email string) (bool, error) {
 	}
 	// exist, return true, nil
 	return true, nil
+}
+
+func GetUserByID(userID int) (*User, error) {
+	if userID <= 0 {
+		return nil, errors.New("userID 为空")
+	}
+	var user User
+	err := DB.Where("id = ?", userID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func GetMaxUserId() int {

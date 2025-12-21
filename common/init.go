@@ -60,6 +60,9 @@ func InitEnv() {
 	} else {
 		CryptoSecret = SessionSecret
 	}
+	if secret := os.Getenv("IG_INTERNAL_SECRET"); secret != "" {
+		IGInternalSecret = secret
+	}
 	if os.Getenv("SQLITE_PATH") != "" {
 		SQLitePath = os.Getenv("SQLITE_PATH")
 	}

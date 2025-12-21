@@ -9,6 +9,14 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	internalRouter := router.Group("/internal/ig")
+	internalRouter.Use(middleware.InternalAuth())
+	{
+		internalRouter.PUT("/tokens/:subscription_id", controller.InternalUpsertIgToken)
+		internalRouter.POST("/tokens/:subscription_id/revoke", controller.InternalRevokeIgToken)
+		internalRouter.GET("/models", controller.InternalListModels)
+	}
+
 	apiRouter := router.Group("/api")
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
