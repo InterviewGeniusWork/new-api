@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
@@ -29,6 +28,7 @@ type Token struct {
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	Group              string         `json:"group" gorm:"default:''"`
 	IgSubscriptionId   *int64         `json:"ig_subscription_id,omitempty" gorm:"column:ig_subscription_id;uniqueIndex"`
+	CrossGroupRetry    bool           `json:"cross_group_retry" gorm:"default:false"` // 跨分组重试，仅auto分组有效
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
 
@@ -36,26 +36,26 @@ func (token *Token) Clean() {
 	token.Key = ""
 }
 
-func (token *Token) GetIpLimitsMap() map[string]any {
+func (token *Token) GetIpLimits() []string {
 	// delete empty spaces
 	//split with \n
-	ipLimitsMap := make(map[string]any)
+	ipLimits := make([]string, 0)
 	if token.AllowIps == nil {
-		return ipLimitsMap
+		return ipLimits
 	}
 	cleanIps := strings.ReplaceAll(*token.AllowIps, " ", "")
 	if cleanIps == "" {
-		return ipLimitsMap
+		return ipLimits
 	}
 	ips := strings.Split(cleanIps, "\n")
 	for _, ip := range ips {
 		ip = strings.TrimSpace(ip)
 		ip = strings.ReplaceAll(ip, ",", "")
-		if common.IsIP(ip) {
-			ipLimitsMap[ip] = true
+		if ip != "" {
+			ipLimits = append(ipLimits, ip)
 		}
 	}
-	return ipLimitsMap
+	return ipLimits
 }
 
 func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
@@ -187,7 +187,7 @@ func (token *Token) Update() (err error) {
 		}
 	}()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
 	return err
 }
 
