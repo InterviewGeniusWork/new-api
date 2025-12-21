@@ -124,7 +124,11 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 	if info != nil {
 		proxy = info.ChannelSetting.Proxy
 	}
-	token, err := vertexcore.AcquireAccessToken(*adc, proxy)
+	channelBase := ""
+	if info != nil {
+		channelBase = info.ChannelBaseUrl
+	}
+	token, err := vertexcore.AcquireAccessToken(*adc, proxy, channelBase)
 	if err != nil {
 		return fmt.Errorf("failed to acquire access token: %w", err)
 	}
@@ -253,7 +257,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if err := json.Unmarshal([]byte(key), adc); err != nil {
 		return nil, fmt.Errorf("failed to decode credentials: %w", err)
 	}
-	token, err := vertexcore.AcquireAccessToken(*adc, proxy)
+	token, err := vertexcore.AcquireAccessToken(*adc, proxy, baseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire access token: %w", err)
 	}
