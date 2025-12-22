@@ -9,7 +9,7 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
-	internalRouter := router.Group("/internal/ig")
+	internalRouter := router.Group("/internal/gi")
 	internalRouter.Use(middleware.InternalAuth())
 	{
 		internalRouter.PUT("/tokens/:subscription_id", controller.InternalUpsertIgToken)

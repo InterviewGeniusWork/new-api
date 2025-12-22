@@ -14,7 +14,7 @@ import (
 type upsertIgTokenRequest struct {
 	Group     string `json:"group"`
 	UserID    int    `json:"user_id"`
-	IGUserID  int    `json:"ig_user_id"`
+	IGUserID  int    `json:"gi_user_id"`
 	ExpiresAt string `json:"expires_at"`
 	RotateKey bool   `json:"rotate_key"`
 }
@@ -35,7 +35,7 @@ func InternalUpsertIgToken(c *gin.Context) {
 		return
 	}
 	if req.IGUserID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "ig_user_id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "gi_user_id is required"})
 		return
 	}
 	user, err := model.GetUserByID(req.UserID)
@@ -57,7 +57,7 @@ func InternalUpsertIgToken(c *gin.Context) {
 		}
 		expiresAt = &parsed
 	}
-	tokenName := fmt.Sprintf("ig-sub-%d-%d", req.IGUserID, subscriptionID)
+	tokenName := fmt.Sprintf("gi-sub-%d-%d", req.IGUserID, subscriptionID)
 	token, err := model.UpsertIgToken(user.Id, subscriptionID, strings.TrimSpace(req.Group), expiresAt, req.RotateKey, tokenName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
@@ -80,7 +80,7 @@ func InternalRevokeIgToken(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid subscription_id"})
 		return
 	}
-	updated, err := model.DisableTokenByIgSubscriptionID(subscriptionID)
+	updated, err := model.DisableTokenByGiSubscriptionID(subscriptionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return

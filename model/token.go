@@ -27,7 +27,7 @@ type Token struct {
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	Group              string         `json:"group" gorm:"default:''"`
-	IgSubscriptionId   *int64         `json:"ig_subscription_id,omitempty" gorm:"column:ig_subscription_id;uniqueIndex"`
+	GiSubscriptionId   *int64         `json:"gi_subscription_id,omitempty" gorm:"column:gi_subscription_id;uniqueIndex"`
 	CrossGroupRetry    bool           `json:"cross_group_retry" gorm:"default:false"` // 跨分组重试，仅auto分组有效
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
@@ -365,12 +365,12 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	return len(tokens), nil
 }
 
-func GetTokenByIgSubscriptionID(subscriptionID int64) (*Token, error) {
+func GetTokenByGiSubscriptionID(subscriptionID int64) (*Token, error) {
 	if subscriptionID == 0 {
 		return nil, errors.New("subscriptionID 不能为空")
 	}
 	var token Token
-	err := DB.Where("ig_subscription_id = ?", subscriptionID).First(&token).Error
+	err := DB.Where("gi_subscription_id = ?", subscriptionID).First(&token).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -392,7 +392,7 @@ func UpsertIgToken(userID int, subscriptionID int64, group string, expiresAt *ti
 		expired = expiresAt.Unix()
 	}
 	updateTime := common.GetTimestamp()
-	token, err := GetTokenByIgSubscriptionID(subscriptionID)
+	token, err := GetTokenByGiSubscriptionID(subscriptionID)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func UpsertIgToken(userID int, subscriptionID int64, group string, expiresAt *ti
 		}
 		name := strings.TrimSpace(tokenName)
 		if name == "" {
-			name = fmt.Sprintf("ig-sub-%d", subscriptionID)
+			name = fmt.Sprintf("gi-sub-%d", subscriptionID)
 		}
 		token = &Token{
 			UserId:           userID,
@@ -416,7 +416,7 @@ func UpsertIgToken(userID int, subscriptionID int64, group string, expiresAt *ti
 			RemainQuota:      0,
 			UnlimitedQuota:   true,
 			Group:            group,
-			IgSubscriptionId: common.GetPointer[int64](subscriptionID),
+			GiSubscriptionId: common.GetPointer[int64](subscriptionID),
 		}
 		if err := DB.Create(token).Error; err != nil {
 			return nil, err
@@ -452,8 +452,8 @@ func UpsertIgToken(userID int, subscriptionID int64, group string, expiresAt *ti
 	token.ExpiredTime = expired
 	token.UnlimitedQuota = true
 	token.AccessedTime = updateTime
-	if token.IgSubscriptionId == nil {
-		token.IgSubscriptionId = common.GetPointer[int64](subscriptionID)
+	if token.GiSubscriptionId == nil {
+		token.GiSubscriptionId = common.GetPointer[int64](subscriptionID)
 	}
 	if common.RedisEnabled {
 		_ = cacheSetToken(*token)
@@ -461,11 +461,11 @@ func UpsertIgToken(userID int, subscriptionID int64, group string, expiresAt *ti
 	return token, nil
 }
 
-func DisableTokenByIgSubscriptionID(subscriptionID int64) (bool, error) {
+func DisableTokenByGiSubscriptionID(subscriptionID int64) (bool, error) {
 	if subscriptionID == 0 {
 		return false, nil
 	}
-	token, err := GetTokenByIgSubscriptionID(subscriptionID)
+	token, err := GetTokenByGiSubscriptionID(subscriptionID)
 	if err != nil {
 		return false, err
 	}
