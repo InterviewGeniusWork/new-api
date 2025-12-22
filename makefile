@@ -2,7 +2,7 @@ FRONTEND_DIR = ./web
 BACKEND_DIR = .
 
 # Docker image build
-REGISTRY ?= 159.75.178.153:18098
+REGISTRY ?= public.ecr.aws/r9p8g9q8
 releaseType ?= dev
 APP_NAME ?= new-api
 
@@ -26,6 +26,7 @@ build:
 		read VERSION; \
 		if [ -z "$$VERSION" ]; then echo "tag required"; exit 1; fi; \
 		git tag "$$VERSION"; \
+		git push origin "$$VERSION"; \
 		IMAGE_TAG="$(REGISTRY)/$(releaseType)/$(APP_NAME):$$VERSION"; \
 	elif [ "$(releaseType)" = "dev" ]; then \
 		GIT_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
