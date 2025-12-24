@@ -175,6 +175,9 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, error) {
 }
 
 func InitDB() (err error) {
+	if err := ensureDatabaseExistsFromEnv("SQL_DSN"); err != nil {
+		return err
+	}
 	db, err := chooseDB("SQL_DSN", false)
 	if err == nil {
 		if common.DebugEnabled {
@@ -214,6 +217,9 @@ func InitLogDB() (err error) {
 	if os.Getenv("LOG_SQL_DSN") == "" {
 		LOG_DB = DB
 		return
+	}
+	if err := ensureDatabaseExistsFromEnv("LOG_SQL_DSN"); err != nil {
+		return err
 	}
 	db, err := chooseDB("LOG_SQL_DSN", true)
 	if err == nil {
